@@ -10,6 +10,7 @@ pub struct AppConfig {
     pub log_level: String,
     pub worker_num: u64,
     pub start_height: u64,
+    pub code_hash: String,
 }
 
 impl AppConfig {
@@ -25,6 +26,9 @@ impl AppConfig {
             log_level,
             worker_num: env_int("WORKER_NUM").unwrap_or(2),
             start_height: env_int("START_HEIGHT").unwrap_or(17_993_051),
+            code_hash: env::var("CODE_HASH").unwrap_or(
+                "510150477b10d6ab551a509b71265f3164e9fd4137fcb5a4322f49f03092c7c5".into(),
+            ),
         }
     }
 }

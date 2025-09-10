@@ -13,8 +13,6 @@ use molecule::prelude::Entity;
 use std::time::Duration;
 use tokio::time;
 
-pub const CODE_HASH: &str = "510150477b10d6ab551a509b71265f3164e9fd4137fcb5a4322f49f03092c7c5";
-
 pub async fn rolling(
     start_height: u64,
     client: &CkbRpcAsyncClient,

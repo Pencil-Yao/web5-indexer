@@ -1,5 +1,5 @@
 use crate::{
-    ckb::{CODE_HASH, rolling},
+    ckb::rolling,
     config::AppConfig,
     db::{establish_connection, query_count},
     error::AppError,
@@ -46,7 +46,7 @@ async fn main() -> Result<(), AppError> {
 
     let pool_for_rolling = pool.clone();
     let task_handle = task::spawn(async move {
-        let target_code_hash = H256::from_str(CODE_HASH).unwrap();
+        let target_code_hash = H256::from_str(&config.code_hash).unwrap();
         let mut conn = pool_for_rolling.get().unwrap();
         let client = CkbRpcAsyncClient::new(&config.ckb_node);
         let mut is_sync = true;
