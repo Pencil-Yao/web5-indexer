@@ -20,8 +20,8 @@ pub struct DidRecord {
     pub handle: String,
     #[diesel(column_name = "txHash")]
     pub tx_hash: String,
-    #[diesel(column_name = "txIndex")]
-    pub tx_index: i32,
+    #[diesel(column_name = "outIndex")]
+    pub out_index: i32,
     pub document: String,
     pub height: i64,
     #[diesel(column_name = "createdAt")]

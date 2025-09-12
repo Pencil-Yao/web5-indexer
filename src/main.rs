@@ -1,5 +1,5 @@
 use crate::{
-    ckb::rolling,
+    ckb::CkbCtx,
     config::AppConfig,
     db::{establish_connection, query_count},
     error::AppError,
@@ -16,6 +16,7 @@ use ckb_sdk::{CkbRpcAsyncClient, NetworkType};
 use ckb_types::H256;
 use std::str::FromStr;
 use tokio::{select, signal::ctrl_c, task};
+use tokio_util::sync::CancellationToken;
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 
@@ -43,11 +44,13 @@ async fn main() -> Result<(), AppError> {
     info!("Config: {config:?}");
 
     let pool = establish_connection(config.data_base_url);
-
+    let token = CancellationToken::new();
     let pool_for_rolling = pool.clone();
+    let mut conn = pool_for_rolling.get().unwrap();
+    let mut ckb_ctx = CkbCtx::init(&mut conn, token);
+
     let task_handle = task::spawn(async move {
         let target_code_hash = H256::from_str(&config.code_hash).unwrap();
-        let mut conn = pool_for_rolling.get().unwrap();
         let client = CkbRpcAsyncClient::new(&config.ckb_node);
         let mut is_sync = true;
         let start_height = config.start_height;
@@ -68,14 +71,22 @@ async fn main() -> Result<(), AppError> {
             }
             Err(e) => return Err(AppError::DbCountError(e.to_string())),
         };
+        let select_token = ckb_ctx.token.clone();
+        let mut count = 0;
         loop {
             select! {
+                _ = select_token.cancelled() => {
+                    info!("Async task: Received cancel signal, exiting...");
+                    return Err(AppError::RunTimeError(
+                        "Async task: Received cancel signal, exiting...".to_string()));
+                },
                 _ = ctrl_c() => {
                     info!("Async task: Received shutdown signal, exiting...");
+                    select_token.cancel();
                     return Err(AppError::RunTimeError(
                         "Async task: Received shutdown signal, exiting...".to_string()));
                 },
-                res = rolling(
+                res = ckb_ctx.rolling(
                     height,
                     &client,
                     &mut conn,
@@ -85,10 +96,20 @@ async fn main() -> Result<(), AppError> {
                     is_sync,
                 ) => {
                     match res {
-                        Ok(sync) => is_sync = sync,
-                        Err(e) => error!("rolling error: {}", e.to_string()),
+                        Ok(sync) => {
+                            count = 0;
+                            is_sync = sync;
+                            height += 1;
+                        },
+                        Err(e) => {
+                            if count > 10 {
+                                select_token.cancel();
+                            }
+                            count += 1;
+                            error!("rolling error: {}", e.to_string())
+                        },
                     }
-                    height += 1;
+
                 }
                 else => break
             }
@@ -96,11 +117,7 @@ async fn main() -> Result<(), AppError> {
         Ok(())
     });
 
-    info!(
-        "Server start, listen: http://0.0.0.0:{}",
-        config.listen_port
-    );
-    HttpServer::new(move || {
+    let server = HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(pool.clone()))
             .wrap(middleware::Compress::default())
@@ -123,10 +140,15 @@ async fn main() -> Result<(), AppError> {
     })
     .bind(("0.0.0.0", config.listen_port as u16))?
     .workers(config.worker_num as usize)
-    .run()
-    .await?;
+    .run();
+
+    let server_handle = server.handle();
+    let server_task = tokio::spawn(server);
 
     let _ = task_handle.await;
+    server_handle.stop(true).await;
+    let _ = server_task.await;
+
     Ok(())
 }
 
