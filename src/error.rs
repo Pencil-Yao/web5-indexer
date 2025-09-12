@@ -28,6 +28,8 @@ pub enum AppError {
     DbCountError(String),
     #[display("Ckb node rpc error: {_0}")]
     CkbRpcError(String),
+    #[display("Handle not registered: {_0}")]
+    HandleNotFound(String),
 }
 
 impl ResponseError for AppError {
@@ -44,6 +46,7 @@ impl ResponseError for AppError {
             AppError::CountNotFound => (500, self.to_string()),
             AppError::DbCountError(_) => (500, self.to_string()),
             AppError::CkbRpcError(_) => (500, self.to_string()),
+            AppError::HandleNotFound(_) => (404, self.to_string()),
         };
         let error_response = ErrorResponse { message: error_msg };
 

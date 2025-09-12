@@ -82,6 +82,21 @@ pub fn query_count(conn: &mut PgConnection) -> Result<i64, AppError> {
 }
 
 #[tracing::instrument(skip_all)]
+pub fn resolve_valid_handle(
+    conn: &mut PgConnection,
+    handle: String,
+) -> Result<String, AppError> {
+    DidRecordSchema::did_record
+        .filter(DidRecordSchema::handle.eq(handle.clone()))
+        .filter(DidRecordSchema::valid.eq(true))
+        .select(DidRecordSchema::did)
+        .first(conn)
+        .optional()
+        .map_err(|e| AppError::DbExecuteFailed(e.to_string()))?
+        .ok_or(AppError::HandleNotFound(handle.clone()))
+}
+
+#[tracing::instrument(skip_all)]
 pub fn insert_record(
     conn: &mut PgConnection,
     did: String,

@@ -3,7 +3,7 @@ use crate::{
     config::AppConfig,
     db::{establish_connection, query_count},
     error::AppError,
-    router::query_did_doc,
+    router::{query_did_doc, resolve_handle},
 };
 use actix_cors::Cors;
 use actix_files::NamedFile;
@@ -96,10 +96,12 @@ async fn main() -> Result<(), AppError> {
                     is_sync,
                 ) => {
                     match res {
-                        Ok(sync) => {
+                        Ok(rolling_result) => {
                             count = 0;
-                            is_sync = sync;
-                            height += 1;
+                            is_sync = rolling_result.is_sync;
+                            if rolling_result.got_block {
+                                height += 1;
+                            }
                         },
                         Err(e) => {
                             if count > 10 {
@@ -129,6 +131,7 @@ async fn main() -> Result<(), AppError> {
                     .max_age(3600),
             )
             .service(web::resource("/{did}").route(web::get().to(query_did_doc)))
+            .service(web::resource("/resolve-handle/{handle}").route(web::get().to(resolve_handle)))
             .service(
                 web::resource("/test").to(|req: HttpRequest| match *req.method() {
                     Method::GET => HttpResponse::Ok(),

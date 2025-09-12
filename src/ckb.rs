@@ -20,6 +20,11 @@ pub struct CkbCtx {
     pub token: CancellationToken,
 }
 
+pub struct RollingResult {
+    pub is_sync: bool,
+    pub got_block: bool,
+}
+
 impl CkbCtx {
     pub fn init(conn: &mut PgConnection, token: CancellationToken) -> Self {
         let mut ctx = CkbCtx {
@@ -44,9 +49,9 @@ impl CkbCtx {
         network: NetworkType,
         target_code_hash: H256,
         mut is_sync: bool,
-    ) -> Result<bool, AppError> {
+    ) -> Result<RollingResult, AppError> {
         trace!("Tracing scanning block #{query_height}");
-        match client
+        let got_block = match client
             .get_block_by_number(BlockNumber::from(query_height))
             .await
             .map_err(|e| AppError::CkbRpcError(e.to_string()))?
@@ -157,6 +162,7 @@ impl CkbCtx {
                         }
                     }
                 }
+                true
             }
             None => {
                 if is_sync {
@@ -169,8 +175,9 @@ impl CkbCtx {
                         is_sync = false;
                     }
                 }
+                false
             }
-        }
+        };
 
         let wait = if is_sync {
             Duration::from_secs(0)
@@ -178,7 +185,7 @@ impl CkbCtx {
             Duration::from_secs(3)
         };
         time::sleep(wait).await;
-        Ok(is_sync)
+        Ok(RollingResult { is_sync, got_block })
     }
 }
 

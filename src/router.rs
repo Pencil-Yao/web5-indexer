@@ -1,5 +1,5 @@
 use crate::{
-    db::{DbPool, query_valid_did_doc},
+    db::{query_valid_did_doc, resolve_valid_handle, DbPool},
     error::AppError,
 };
 use actix_web::{
@@ -16,6 +16,21 @@ pub async fn query_did_doc(path: Path<String>, pool: Data<DbPool>) -> HttpRespon
     {
         Ok(res) => match res {
             Ok(doc) => HttpResponse::Ok().json(doc),
+            Err(err) => HttpResponse::from_error(err),
+        },
+        Err(err) => HttpResponse::from_error(err),
+    }
+}
+
+pub async fn resolve_handle(path: Path<String>, pool: Data<DbPool>) -> HttpResponse {
+    let handle = path.into_inner();
+    let mut conn = pool.get().unwrap();
+    match block(move || resolve_valid_handle(&mut conn, handle))
+        .await
+        .map_err(|e| AppError::RunTimeError(e.to_string()))
+    {
+        Ok(res) => match res {
+            Ok(did) => HttpResponse::Ok().body(did),
             Err(err) => HttpResponse::from_error(err),
         },
         Err(err) => HttpResponse::from_error(err),
